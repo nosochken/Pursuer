@@ -7,14 +7,14 @@ public class RigidbodyMovement : MonoBehaviour
     [SerializeField] private CharacterControllerMovement _target;
 
     [SerializeField] private float _speed = 8.7f;
-    [SerializeField] private float _appliedForce = 4f;
+    [SerializeField] private float _acceleration = 1.5f;
 
     [SerializeField] private float _minInsurmountableStepHeight = 0.8f;
     [SerializeField] private float _checkDistance = 0.5f;
-    [SerializeField] private float _slopeMaxAngle = 45f;
+    [SerializeField] private float _surfaceMaxAngle = 45f;
 
     private Rigidbody _rigidbody;
-    private Vector3 _direction;
+    private Vector3 _velocity;
     private float _rightAngle = 90f;
 
     private void Awake()
@@ -30,20 +30,41 @@ public class RigidbodyMovement : MonoBehaviour
     private void MoveTowardsTarget()
     {
         Vector3 directionToTarget = (_target.transform.position - transform.position).normalized;
-        _direction = new Vector3(directionToTarget.x, 0, directionToTarget.z);
+        Vector3 horizontalDirection = new Vector3(directionToTarget.x, 0f, directionToTarget.z);
 
-        RotateTowardsTatget();
+        _velocity = _rigidbody.velocity;
+        _velocity.x = horizontalDirection.x * _speed;
+        _velocity.z = horizontalDirection.z * _speed;
+
+        RotateTowardsTatget(horizontalDirection);
+
+        ChangeVelocityBasedOnSurface(SurfaceDeterminant.GetSurfaceState(_rigidbody.position, _rigidbody.velocity));
 
         if (Physics.Raycast(_feet.position, transform.forward, out RaycastHit hitInfo, _checkDistance))
             DealWithObstacle(hitInfo);
 
-        _rigidbody.velocity = _direction * _speed + Physics.gravity;
+        _rigidbody.velocity = _velocity;
     }
 
-    private void RotateTowardsTatget()
+    private void RotateTowardsTatget(Vector3 horizontalDirection)
     {
-        Quaternion targetRotation = Quaternion.LookRotation(_direction);
+        Quaternion targetRotation = Quaternion.LookRotation(horizontalDirection);
         transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, 10f * Time.deltaTime);
+    }
+
+    private void ChangeVelocityBasedOnSurface(SurfaceState surfaceState)
+    {
+        if (surfaceState == SurfaceState.Rise)
+        {
+            if (SurfaceDeterminant.CanOvercomeSurface(transform.position, _surfaceMaxAngle))
+                _velocity.z *= _acceleration;
+            else
+                _velocity = Vector3.zero;
+        }
+        else if (surfaceState == SurfaceState.Descent)
+        {
+            _velocity.z *= _acceleration;
+        }
     }
 
     private void DealWithObstacle(RaycastHit hit)
@@ -55,16 +76,9 @@ public class RigidbodyMovement : MonoBehaviour
             Vector3 pointOfNoGo = _feet.position + Vector3.up * _minInsurmountableStepHeight;
 
             if (Physics.Raycast(pointOfNoGo, transform.forward, _checkDistance))
-                _direction = Vector3.zero;
-
+                _velocity = Vector3.zero;
             else
-                _direction += Vector3.up * _appliedForce;
+                _velocity = Vector3.up * _acceleration;
         }
-        else if (slopeAngle > 0 && slopeAngle < _slopeMaxAngle)
-        {
-            _direction.z *= _appliedForce;
-        }
-        else
-            _direction = Vector3.zero;
     }
 }
